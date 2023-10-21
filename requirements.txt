@@ -1,0 +1,3 @@
+bip_utils==2.7.1
+hdwallet==2.2.1
+Requests==2.31.0
