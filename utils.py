@@ -2,7 +2,7 @@ import sys
 import os
 
 
-def get_run_path():
+def get_run_path() -> str:
     if getattr(sys, "frozen", False):
         app_path = os.path.dirname(sys.executable)
     else:
@@ -13,5 +13,5 @@ def get_run_path():
     return app_path
 
 
-def get_file_path(file_name):
+def get_file_path(file_name) -> str:
     return os.path.join(get_run_path(), file_name)

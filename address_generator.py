@@ -1,11 +1,13 @@
 import bip_utils
 import hdwallet
 from hdwallet.derivations import BIP44Derivation
-from hdwallet.cryptocurrencies import LitecoinMainnet, DogecoinMainnet, DashMainnet, BitcoinMainnet
+from hdwallet.cryptocurrencies import EthereumMainnet, LitecoinMainnet, DogecoinMainnet, DashMainnet, BitcoinMainnet
 
 
-def bip44(my_mnemonic: str, chain: str):
-    if chain == "ltc":
+def bip44(my_mnemonic: str, chain: str) -> str | bool:
+    if chain == "eth":
+        my_chain = (EthereumMainnet)
+    elif chain == "ltc":
         my_chain = LitecoinMainnet
     elif chain == "doge":
         my_chain = DogecoinMainnet
@@ -29,7 +31,7 @@ def bip44(my_mnemonic: str, chain: str):
         return False
 
 
-def bip84(my_mnemonic: str):
+def bip84(my_mnemonic: str) -> str | bool:
     try:
         my_seed = bip_utils.Bip39SeedGenerator(my_mnemonic).Generate()
         bip84_wallet = bip_utils.Bip84.FromSeed(my_seed, bip_utils.Bip84Coins.BITCOIN)

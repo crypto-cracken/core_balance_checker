@@ -61,7 +61,7 @@ def get_balance(my_mnemonic: str, my_proxy_list: list, proxy_type: str, usd_pric
         f.write(f"{my_mnemonic}\n")
 
 
-def get_usd_price(chain: str):
+def get_usd_price(chain: str) -> float:
     usd_price = float(requests.get(f"https://coincodex.com/api/coincodex/get_coin/{chain}").json()["last_price_usd"])
     print(f"{chain.upper()} price: {usd_price}$")
     time.sleep(1)
@@ -70,7 +70,7 @@ def get_usd_price(chain: str):
 
 if __name__ == "__main__":
     # set title
-    title = "Crypto Cracken Balance Checker V1.0.0"
+    title = "Crypto Cracken Balance Checker V1.1.0"
     system_type = platform.system()
     if system_type == "Windows":
         os.system("title " + title)
@@ -82,6 +82,7 @@ if __name__ == "__main__":
     config.read(utils.get_file_path("settings.ini"))
     threads = int(config["MAIN"]["threads"])
     proxy_type = config["MAIN"]["proxy_type"]
+    check_eth = config["CHAINS"].getboolean("check_eth")
     check_btc = config["CHAINS"].getboolean("check_btc")
     check_ltc = config["CHAINS"].getboolean("check_ltc")
     check_doge = config["CHAINS"].getboolean("check_doge")
@@ -104,6 +105,8 @@ if __name__ == "__main__":
     # get usd prices
     print("Getting usd prices...")
     usd_prices = {}
+    if check_eth:
+        usd_prices["eth"] = get_usd_price("eth")
     if check_btc:
         usd_prices["btc"] = get_usd_price("btc")
     if check_ltc:
@@ -117,6 +120,18 @@ if __name__ == "__main__":
     proxy_list = list(proxy_list)
 
     # check balance
+    if check_eth:
+        print("Checking ETH")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
+            executor.map(
+                get_balance,
+                mnemonics,
+                repeat(proxy_list),
+                repeat(proxy_type),
+                repeat(usd_prices["eth"]),
+                repeat("eth"),
+            )
+
     if check_btc:
         print("Checking BTC")
         with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:

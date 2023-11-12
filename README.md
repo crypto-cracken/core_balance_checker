@@ -1,6 +1,7 @@
-# Crypto Balance Checker
+# Seed Checker
 
 ## Supported Chains
+- [x] ETH
 - [x] BTC
 - [x] LTC
 - [x] Doge
