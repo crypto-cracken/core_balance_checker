@@ -1,21 +1,27 @@
 import utils
 import address_generator
 import configparser
+import time
 import os
-import time
-import platform
-import time
 import requests
 import random
 import concurrent.futures
 from itertools import repeat
 
 
-def get_balance(my_mnemonic: str, my_proxy_list: list, proxy_type: str, usd_price: float, chain: str):
-    if chain == "btc":
-        address = address_generator.bip84(my_mnemonic)
+def get_balance(my_mnemonic: str, input_type: str, my_proxy_list: list, proxy_type: str, usd_price: float, chain: str):
+    if input_type == "seeds":
+        if chain == "btc":
+            address = address_generator.bip84(my_mnemonic)
+        else:
+            address = address_generator.bip44(my_mnemonic, chain)
+    elif input_type == "privkeys":
+        if chain == "btc":
+            address = address_generator.get_from_privkey(my_mnemonic)
+        else:
+            return False
     else:
-        address = address_generator.bip44(my_mnemonic, chain)
+        address = my_mnemonic
 
     if not address:
         return False
@@ -47,14 +53,27 @@ def get_balance(my_mnemonic: str, my_proxy_list: list, proxy_type: str, usd_pric
 
             # save results
             if balance_usd > 1:
-                print(f"{my_mnemonic} : {chain.upper()} : {balance_usd}$")
-                with open(f"with_balance_{chain}.txt", "a", encoding="utf8") as f:
-                    f.write(f"{my_mnemonic} : {address} : {balance_usd}$\n")
+                if input_type == "seeds" or input_type == "privkeys":
+                    print(utils.bcolors.GREEN + f"{my_mnemonic}\n    * Address: {address}\n    * CHAIN: {chain.upper()}\n    * Balance: {balance_usd}$" + utils.bcolors.END)
+                    with open(f"results/with_balance_{chain}.txt", "a", encoding="utf8") as f:
+                        f.write(f"{my_mnemonic} : {address} : {balance_usd}$\n")
+                else:
+                    print(utils.bcolors.GREEN + f"Address: {address}\n    * CHAIN: {chain.upper()}\n    * Balance: {balance_usd}$" + utils.bcolors.END)
+                    with open(f"results/with_balance_{chain}.txt", "a", encoding="utf8") as f:
+                        f.write(f"{address} : {balance_usd}$\n")
+            else:
+                if input_type == "seeds" or input_type == "privkeys":
+                    print(utils.bcolors.RED + f"{my_mnemonic}\n    * Address: {address}\n    * CHAIN: {chain.upper()}" + utils.bcolors.END)
+                    with open(f"results/no_balance_{chain}.txt", "a", encoding="utf8") as f:
+                        f.write(f"{my_mnemonic} : {address} : {balance_usd}$\n")
+                else:
+                    print(utils.bcolors.RED + f"Address: {address}\n    * CHAIN: {chain.upper()}" + utils.bcolors.END)
+                    with open(f"results/no_balance_{chain}.txt", "a", encoding="utf8") as f:
+                        f.write(f"{address} : {balance_usd}$\n")
 
-            # break if successful, repeat and change proxy if failed
             break
         except Exception as e:
-            time.sleep(1)
+            time.sleep(2)
             continue
 
     with open(f"checked_{chain}.txt", "a", encoding="utf8") as f:
@@ -70,18 +89,14 @@ def get_usd_price(chain: str) -> float:
 
 if __name__ == "__main__":
     # set title
-    title = "Crypto Cracken Balance Checker V1.1.0"
-    system_type = platform.system()
-    if system_type == "Windows":
-        os.system("title " + title)
-    elif system_type == "Linux":
-        print(f"\33]0;{title}\a", end="", flush=True)
+    utils.set_title("Core Balance Checker")
 
     # parse config
     config = configparser.ConfigParser()
     config.read(utils.get_file_path("settings.ini"))
     threads = int(config["MAIN"]["threads"])
     proxy_type = config["MAIN"]["proxy_type"]
+    input_type = config["MAIN"]["input_type"]
     check_eth = config["CHAINS"].getboolean("check_eth")
     check_btc = config["CHAINS"].getboolean("check_btc")
     check_ltc = config["CHAINS"].getboolean("check_ltc")
@@ -90,20 +105,28 @@ if __name__ == "__main__":
 
     # parse mnemonics
     mnemonics = set()
-    with open("seeds.txt", "r", encoding="utf8") as f:
+    with open("inputs.txt", "r", encoding="utf8") as f:
         for line in f:
             mnemonics.add(line.strip())
     print(f"Found seeds: {len(mnemonics)}")
 
-    # parse mnemonics
+    # parse proxy
     proxy_list = set()
-    with open("proxies.txt", "r", encoding="utf8") as f:
+    with open("proxy.txt", "r", encoding="utf8") as f:
         for line in f:
             proxy_list.add(line.strip())
     print(f"Found proxies: {len(proxy_list)}")
 
+    mnemonics = list(mnemonics)
+    proxy_list = list(proxy_list)
+
+    # results
+    dir = utils.get_file_path(f"results")
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+
     # get usd prices
-    print("Getting usd prices...")
+    utils.set_title("Getting usd prices...")
     usd_prices = {}
     if check_eth:
         usd_prices["eth"] = get_usd_price("eth")
@@ -116,16 +139,14 @@ if __name__ == "__main__":
     if check_dash:
         usd_prices["dash"] = get_usd_price("dash")
 
-    mnemonics = list(mnemonics)
-    proxy_list = list(proxy_list)
-
     # check balance
     if check_eth:
-        print("Checking ETH")
+        utils.set_title("Checking ETH")
         with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
             executor.map(
                 get_balance,
                 mnemonics,
+                repeat(input_type),
                 repeat(proxy_list),
                 repeat(proxy_type),
                 repeat(usd_prices["eth"]),
@@ -133,11 +154,12 @@ if __name__ == "__main__":
             )
 
     if check_btc:
-        print("Checking BTC")
+        utils.set_title("Checking BTC")
         with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
             executor.map(
                 get_balance,
                 mnemonics,
+                repeat(input_type),
                 repeat(proxy_list),
                 repeat(proxy_type),
                 repeat(usd_prices["btc"]),
@@ -145,11 +167,12 @@ if __name__ == "__main__":
             )
 
     if check_ltc:
-        print("Checking LTC")
+        utils.set_title("Checking LTC")
         with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
             executor.map(
                 get_balance,
                 mnemonics,
+                repeat(input_type),
                 repeat(proxy_list),
                 repeat(proxy_type),
                 repeat(usd_prices["ltc"]),
@@ -157,11 +180,12 @@ if __name__ == "__main__":
             )
 
     if check_doge:
-        print("Checking DOGE")
+        utils.set_title("Checking DOGE")
         with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
             executor.map(
                 get_balance,
                 mnemonics,
+                repeat(input_type),
                 repeat(proxy_list),
                 repeat(proxy_type),
                 repeat(usd_prices["doge"]),
@@ -169,11 +193,12 @@ if __name__ == "__main__":
             )
 
     if check_dash:
-        print("Checking DASH")
+        utils.set_title("Checking DASH")
         with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
             executor.map(
                 get_balance,
                 mnemonics,
+                repeat(input_type),
                 repeat(proxy_list),
                 repeat(proxy_type),
                 repeat(usd_prices["dash"]),

@@ -1,3 +1,4 @@
+import blocksmith
 import bip_utils
 import hdwallet
 from hdwallet.derivations import BIP44Derivation
@@ -6,7 +7,7 @@ from hdwallet.cryptocurrencies import EthereumMainnet, LitecoinMainnet, Dogecoin
 
 def bip44(my_mnemonic: str, chain: str) -> str | bool:
     if chain == "eth":
-        my_chain = (EthereumMainnet)
+        my_chain = EthereumMainnet
     elif chain == "ltc":
         my_chain = LitecoinMainnet
     elif chain == "doge":
@@ -43,3 +44,11 @@ def bip84(my_mnemonic: str) -> str | bool:
     except:
         print(f"Invalid mnemonic: {my_mnemonic}")
         return False
+
+
+def get_from_privkey(privkey: str):
+    try:
+        address = blocksmith.BitcoinWallet.generate_address(privkey)
+        return address
+    except:
+        pass
