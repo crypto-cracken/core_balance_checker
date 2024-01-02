@@ -9,75 +9,70 @@ import concurrent.futures
 from itertools import repeat
 
 
-def get_balance(my_mnemonic: str, input_type: str, my_proxy_list: list, proxy_type: str, usd_price: float, chain: str):
+def get_balance(my_mnemonic: str, depth: int, input_type: str, my_proxy_list: list, proxy_type: str, usd_price: float, chain: str):
+    addresses = []
+
     if input_type == "seeds":
-        if chain == "btc":
-            address = address_generator.bip84(my_mnemonic)
-        else:
-            address = address_generator.bip44(my_mnemonic, chain)
+        addresses = address_generator.bip44(my_mnemonic, chain, depth)
     elif input_type == "privkeys":
         if chain == "btc":
             address = address_generator.get_from_privkey(my_mnemonic)
+            addresses.append(address)
         else:
             return False
     else:
-        address = my_mnemonic
+        addresses.append(my_mnemonic)
 
-    if not address:
+    addresses = [i for i in addresses if i]
+    if len(addresses) == 0:
         return False
 
-    while True:
-        try:
-            # set proxies
-            proxy = random.choice(my_proxy_list)
-            if proxy_type.lower() == "http":
-                my_proxies = {"http": f"http://{proxy}", "https": f"http://{proxy}"}
-            elif proxy_type.lower() == "socks5":
-                my_proxies = {"http": f"socks5://{proxy}", "https": f"socks5://{proxy}"}
-            else:
-                print("Wrong proxy type, use 'http' or 'socks5'")
-                return False
-
-            # get response
-            response = requests.get(
-                f"https://api.blockcypher.com/v1/{chain}/main/addrs/{address}",
-                proxies=my_proxies,
-            )
-
-            # get balance
-            if chain == "eth":
-                balance = response.json()["balance"] / 1000000000000000000
-            else:
-                balance = response.json()["balance"] / 100000000
-            balance_usd = int(balance * usd_price)
-
-            # save results
-            if balance_usd > 1:
-                if input_type == "seeds" or input_type == "privkeys":
-                    print(utils.bcolors.GREEN + f"{my_mnemonic}\n    * Address: {address}\n    * CHAIN: {chain.upper()}\n    * Balance: {balance_usd}$" + utils.bcolors.END)
-                    with open(f"results/with_balance_{chain}.txt", "a", encoding="utf8") as f:
-                        f.write(f"{my_mnemonic} : {address} : {balance_usd}$\n")
+    for address in addresses:
+        while True:
+            try:
+                # set proxies
+                proxy = random.choice(my_proxy_list)
+                if proxy_type.lower() == "http":
+                    my_proxies = {"http": f"http://{proxy}", "https": f"http://{proxy}"}
+                elif proxy_type.lower() == "socks5":
+                    my_proxies = {"http": f"socks5://{proxy}", "https": f"socks5://{proxy}"}
                 else:
-                    print(utils.bcolors.GREEN + f"Address: {address}\n    * CHAIN: {chain.upper()}\n    * Balance: {balance_usd}$" + utils.bcolors.END)
-                    with open(f"results/with_balance_{chain}.txt", "a", encoding="utf8") as f:
-                        f.write(f"{address} : {balance_usd}$\n")
-            else:
-                if input_type == "seeds" or input_type == "privkeys":
-                    print(utils.bcolors.RED + f"{my_mnemonic}\n    * Address: {address}\n    * CHAIN: {chain.upper()}" + utils.bcolors.END)
-                    with open(f"results/no_balance_{chain}.txt", "a", encoding="utf8") as f:
-                        f.write(f"{my_mnemonic} : {address} : {balance_usd}$\n")
+                    print(utils.bcolors.RED + "Wrong proxy type, use 'http' or 'socks5'" + utils.bcolors.END)
+                    return False
+
+                # get response
+                response = requests.get(
+                    f"https://api.blockcypher.com/v1/{chain}/main/addrs/{address}",
+                    proxies=my_proxies,
+                    timeout=10,
+                )
+
+                # get balance
+                if chain == "eth":
+                    balance = response.json()["balance"] / 1000000000000000000
                 else:
-                    print(utils.bcolors.RED + f"Address: {address}\n    * CHAIN: {chain.upper()}" + utils.bcolors.END)
-                    with open(f"results/no_balance_{chain}.txt", "a", encoding="utf8") as f:
-                        f.write(f"{address} : {balance_usd}$\n")
+                    balance = response.json()["balance"] / 100000000
+                total_balance = int(balance * usd_price)
+
+                # save results
+                output = "+--------------------+--------------------------------------------------------------------+\n"
+                if input_type == "seeds" or input_type == "privkeys":
+                    output += f"| Mnemonic...........| {my_mnemonic}\n"
+                output += f"| Address............| {address}\n"
+                output += f"| Chain..............| {chain.upper()}\n"
+                output += f"| Balance............| {total_balance}$\n"
+
+                if total_balance > 1:
+                    utils.save_result(output, chain, True)
+                else:
+                    utils.save_result(output, chain, False)
+
+            except Exception as e:
+                print(utils.bcolors.RED + f"ERROR (Banned Proxy):\n{e}\n" + utils.bcolors.END)
+                time.sleep(3)
+                continue
 
             break
-        except Exception as e:
-            time.sleep(2)
-            continue
-
-    with open(f"checked_{chain}.txt", "a", encoding="utf8") as f:
-        f.write(f"{my_mnemonic}\n")
 
 
 def get_usd_price(chain: str) -> float:
@@ -97,6 +92,7 @@ if __name__ == "__main__":
     threads = int(config["MAIN"]["threads"])
     proxy_type = config["MAIN"]["proxy_type"]
     input_type = config["MAIN"]["input_type"]
+    depth = int(config["MAIN"]["depth"])
     check_eth = config["CHAINS"].getboolean("check_eth")
     check_btc = config["CHAINS"].getboolean("check_btc")
     check_ltc = config["CHAINS"].getboolean("check_ltc")
@@ -105,7 +101,7 @@ if __name__ == "__main__":
 
     # parse mnemonics
     mnemonics = set()
-    with open("inputs.txt", "r", encoding="utf8") as f:
+    with open("input.txt", "r", encoding="utf8") as f:
         for line in f:
             mnemonics.add(line.strip())
     print(f"Found seeds: {len(mnemonics)}")
@@ -126,6 +122,7 @@ if __name__ == "__main__":
         os.makedirs(dir)
 
     # get usd prices
+    print("")
     utils.set_title("Getting usd prices...")
     usd_prices = {}
     if check_eth:
@@ -138,6 +135,7 @@ if __name__ == "__main__":
         usd_prices["doge"] = get_usd_price("doge")
     if check_dash:
         usd_prices["dash"] = get_usd_price("dash")
+    print("")
 
     # check balance
     if check_eth:
@@ -146,6 +144,7 @@ if __name__ == "__main__":
             executor.map(
                 get_balance,
                 mnemonics,
+                repeat(depth),
                 repeat(input_type),
                 repeat(proxy_list),
                 repeat(proxy_type),
@@ -159,6 +158,7 @@ if __name__ == "__main__":
             executor.map(
                 get_balance,
                 mnemonics,
+                repeat(depth),
                 repeat(input_type),
                 repeat(proxy_list),
                 repeat(proxy_type),
@@ -172,6 +172,7 @@ if __name__ == "__main__":
             executor.map(
                 get_balance,
                 mnemonics,
+                repeat(depth),
                 repeat(input_type),
                 repeat(proxy_list),
                 repeat(proxy_type),
@@ -185,6 +186,7 @@ if __name__ == "__main__":
             executor.map(
                 get_balance,
                 mnemonics,
+                repeat(depth),
                 repeat(input_type),
                 repeat(proxy_list),
                 repeat(proxy_type),
@@ -198,6 +200,7 @@ if __name__ == "__main__":
             executor.map(
                 get_balance,
                 mnemonics,
+                repeat(depth),
                 repeat(input_type),
                 repeat(proxy_list),
                 repeat(proxy_type),

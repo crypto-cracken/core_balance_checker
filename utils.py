@@ -33,3 +33,18 @@ def set_title(title):
         os.system("title " + title)
     elif system_type == "Linux":
         print(f"\33]0;{title}\a", end="", flush=True)
+
+
+def save_result(msg, filename, with_balance):
+    if with_balance:
+        print(bcolors.GREEN + msg + bcolors.END)
+    else:
+        print(bcolors.YELLOW + msg + bcolors.END)
+
+    if with_balance:
+        path = f"results/with_balance_{filename}.txt"
+    else:
+        path = f"results/no_balance_{filename}.txt"
+
+    with open(path, "a", encoding="utf8") as f:
+        f.write(f"{msg}\n")

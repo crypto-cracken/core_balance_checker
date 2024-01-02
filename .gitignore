@@ -1,3 +1,4 @@
-seeds.txt
-proxies.txt
+input.txt
+proxy.txt
+results
 __pycache__
